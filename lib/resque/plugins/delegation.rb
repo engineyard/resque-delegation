@@ -106,45 +106,7 @@ module Resque
 
         #run last step if no more steps are needed
         @step_list.each do |step|
-          if steps_ran.include?(step.signature)
-            #already ran
-          elsif steps_running.include?(step.signature)
-            #already Q'd
-          elsif step.run_last
-            # puts "Can't run last step #{step.signature} yet"
-            #this is the last step, only run if all other steps are run
-          elsif (step.inputs - available_inputs.keys).empty?
-            #all of the steps needed inputs are available
-            #run!
-            result = step.run(available_inputs)
-            puts "running step #{step.signature}"
-            if result.is_a?(Retry)
-              puts "enqueue #{self} in #{result.seconds}"
-              Resque.enqueue_in(result.seconds, self, meta_id, *args)
-            elsif result.is_a?(StepDependency)
-              #TODO: what if the child job is dQ'd before caller has a chance to set parent_job
-              # don't re-enQ a child that's already enQ'd!
-              # it might not be in steps ran but it doesn't need to be duplicated!
-              puts "enqueue #{result.job_class}"
-              child_job = result.job_class.enqueue(*result.job_args)
-              @meta["steps_running"] << step.signature
-              child_job["parent_job"] = [self, meta_id, args]
-              child_job["expected_output"] = step.output
-              child_job["signature_from_parent"] = step.signature
-              child_job.save
-            else
-              if step.output
-                available_inputs[step.output] = result
-              end
-              # puts "available_inputs are now #{available_inputs.inspect}"
-              if @meta["steps_ran"].include?(step.signature)
-                raise "WHAT? ran #{step.signature} twice!"
-              end
-              @meta["steps_ran"] << step.signature
-            end
-          else
-            # puts "waiting before we can run step #{step.signature} -- need #{step.inputs}"
-          end
+          run_step(steps_ran, steps_running, available_inputs, step, meta_id, args)
         end
         
         if steps_ran.size + 1 == @step_list.size
@@ -152,24 +114,9 @@ module Resque
 
           step = @step_list.last
           result = step.run(available_inputs)
-          if @meta["parent_job"]          
+          if @meta["parent_job"]
             # puts "#{meta_id} has parent"
-            parent_job_class_name, parent_meta_id, parent_args = @meta["parent_job"]
-            parent_job_class = const_get(parent_job_class_name)
-            parent_meta = parent_job_class.get_jobdata(parent_meta_id)
-            if expected_output = @meta["expected_output"]
-              parent_meta["available_inputs"][expected_output] = result
-              parent_meta.save
-            end
-            if @meta["signature_from_parent"]
-              if parent_meta["steps_ran"].include?(@meta["signature_from_parent"])
-                raise "WHAT? ran #{@meta["signature_from_parent"]} twice!"
-              end
-              parent_meta["steps_ran"] << @meta["signature_from_parent"]
-              parent_meta.save
-            end
-            puts "enqueue #{parent_job_class}"
-            Resque.enqueue(parent_job_class, parent_meta_id, *parent_args)
+            parent_job(result)
           end
           if @meta["steps_ran"].include?(step.signature)
             raise "WHAT? ran #{step.signature} twice!"
@@ -179,6 +126,68 @@ module Resque
         @meta.save
 
         puts "End of #{self}"
+      end
+      
+      def parent_job(result)
+        parent_job_class_name, parent_meta_id, parent_args = @meta["parent_job"]
+        parent_job_class = const_get(parent_job_class_name)
+        parent_meta = parent_job_class.get_jobdata(parent_meta_id)
+        if expected_output = @meta["expected_output"]
+          parent_meta["available_inputs"][expected_output] = result
+          parent_meta.save
+        end
+        if @meta["signature_from_parent"]
+          if parent_meta["steps_ran"].include?(@meta["signature_from_parent"])
+            raise "WHAT? ran #{@meta["signature_from_parent"]} twice!"
+          end
+          parent_meta["steps_ran"] << @meta["signature_from_parent"]
+          parent_meta.save
+        end
+        puts "enqueue #{parent_job_class}"
+        Resque.enqueue(parent_job_class, parent_meta_id, *parent_args)
+      end
+      
+      def run_step(steps_ran, steps_running, available_inputs, step, meta_id, args)
+        if steps_ran.include?(step.signature)
+          #already ran
+        elsif steps_running.include?(step.signature)
+          #already Q'd
+        elsif step.run_last
+          # puts "Can't run last step #{step.signature} yet"
+          #this is the last step, only run if all other steps are run
+        elsif (step.inputs - available_inputs.keys).empty?
+          #all of the steps needed inputs are available
+          #run!
+          result = step.run(available_inputs)
+          puts "running step #{step.signature}"
+          if result.is_a?(Retry)
+            puts "enqueue #{self} in #{result.seconds}"
+            Resque.enqueue_in(result.seconds, self, meta_id, *args)
+          elsif result.is_a?(StepDependency)
+            #TODO: what if the child job is dQ'd before caller has a chance to set parent_job
+            # don't re-enQ a child that's already enQ'd!
+            # it might not be in steps ran but it doesn't need to be duplicated!
+            puts "enqueue #{result.job_class}"
+            child_job = result.job_class.enqueue(*result.job_args)
+            @meta["steps_running"] << step.signature
+            child_job["parent_job"] = [self, meta_id, args]
+            child_job["expected_output"] = step.output
+            child_job["signature_from_parent"] = step.signature
+            child_job.save
+          else
+            if step.output
+              available_inputs[step.output] = result
+            end
+            # puts "available_inputs are now #{available_inputs.inspect}"
+            if @meta["steps_ran"].include?(step.signature)
+              raise "WHAT? ran #{step.signature} twice!"
+            end
+            @meta["steps_ran"] << step.signature
+          end
+        else
+          # puts "waiting before we can run step #{step.signature} -- need #{step.inputs}"
+        end
+        
       end
 
       def step(*args, &block)
