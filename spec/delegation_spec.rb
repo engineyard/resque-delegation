@@ -62,7 +62,7 @@ class BaseJobWithPerform < Resque::Plugins::Loner::UniqueJob
   end  
 end
 
-class Sandwhich < BaseJobWithPerform
+class Sandwich < BaseJobWithPerform
   # extend Resque::Plugins::Delegation
   # @queue = :test
 
@@ -88,19 +88,19 @@ class Sandwhich < BaseJobWithPerform
     end
     last_step("assemble", :bread, "with", :tomato_slices, "with", :cheese_slices
     ) do |bread, tomato_slices, cheese_slices|
-      sandwhich = bread[0]
+      sandwich = bread[0]
       tomato_slices.each do |tomato_slice|
-        sandwhich += tomato_slice
+        sandwich += tomato_slice
         if cheese_slice = cheese_slices.pop
-          sandwhich += cheese_slice
+          sandwich += cheese_slice
         end
       end
       cheese_slices.each do |cheese_slice|
-        sandwhich += cheese_slice        
+        sandwich += cheese_slice        
       end
-      sandwhich += bread[1]
-      puts "Sandwhich complete!"
-      WhatHappened.record(sandwhich)
+      sandwich += bread[1]
+      puts "Sandwich complete!"
+      WhatHappened.record(sandwich)
     end
   end
 
@@ -183,7 +183,7 @@ class Cheese < BaseJobWithPerform
   end
 end
 
-describe "sandwhich" do
+describe "sandwich" do
   before do
     WhatHappened.reset!
     Resque.redis.flushall
@@ -336,7 +336,7 @@ describe "sandwhich" do
   10.times do |i|
 
     it "makes one on try #{i}" do
-      meta = Sandwhich.enqueue('red', true, @cheesemaker)
+      meta = Sandwich.enqueue('red', true, @cheesemaker)
       work_until_finished
       WhatHappened.what_happened.should == "(TCTCTCC|"
     end
@@ -356,7 +356,7 @@ describe "sandwhich" do
   #   end
   #
   #   it "never enQs duplicates of the sandwich more than once" do
-  #     meta = Sandwhich.enqueue('red', true, @cheesemaker)
+  #     meta = Sandwich.enqueue('red', true, @cheesemaker)
   #     @worker.assertion = Proc.new do
   #       the_q = Resque.peek(:test, 0, 100)
   #       the_q.should == the_q.uniq
