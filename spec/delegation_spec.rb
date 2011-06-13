@@ -47,7 +47,7 @@ describe "the basics" do
   end
 end
 
-class BaseJobWithPerform < Resque::Plugins::Loner::UniqueJob
+class BaseJobWithPerform
   extend Resque::Plugins::Delegation
   def self.queue
     :test

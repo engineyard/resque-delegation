@@ -1,8 +1,9 @@
 require 'resque/plugins/meta'
 require 'resque/plugins/delegation/other_plugin_exts/meta'
 require 'resque/plugins/lock'
-require 'resque-loner'
-require 'resque/plugins/delegation/other_plugin_exts/loner'
+require 'resque/plugins/unique_job'
+# require 'resque-loner'
+# require 'resque/plugins/delegation/other_plugin_exts/loner'
 require 'resque_scheduler'
 
 module Resque
@@ -11,6 +12,7 @@ module Resque
       def self.extended(mod)
         mod.extend(Resque::Plugins::Meta)
         mod.extend(Resque::Plugins::Lock)
+        mod.extend(Resque::Plugins::UniqueJob)
       end
 
       class Step
